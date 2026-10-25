@@ -8,6 +8,7 @@ self.kernel_size, etc. rather than fixed numbers.
 """
 import cv2
 import numpy as np
+import plotly.graph_objects as go
 import pytest
 import os
 import sys
@@ -16,8 +17,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from lab03 import FluidLevelDetector, BOTTLE_IMAGE_URL
 from helpers.dataloader import DATA_DIR, download_image
+from helpers.plotting import save_html
 
 SIMILARITY_TOLERANCE = 10   # max px diff between left and right bottles
+
+
+def test_save_html_uses_valid_css_block(tmp_path):
+    fig = go.Figure()
+    out = tmp_path / "report.html"
+    save_html(fig, output_path=out)
+    html = out.read_text(encoding="utf-8")
+    assert "body{font-family:sans-serif;padding:20px}" in html
+    assert "body{{font-family:sans-serif;padding:20px}}" not in html
+
 OVERFILL_THRESHOLD   = 30   # min px diff to confirm middle bottle is higher
 
 @pytest.fixture(scope="module")

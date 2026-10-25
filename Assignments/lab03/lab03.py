@@ -66,104 +66,97 @@ class FluidLevelDetector:
         self.horizontal_lines = []
         self.fluid_levels     = []
 
+    
     def threshold(self, image_gray):
-        """Step 1 — turn the dark bottles into white shapes on a black background.
-
-        Args:
-            image_gray (np.ndarray): 2D uint8 greyscale image.
-
-        Returns:
-            np.ndarray: 2D uint8 binary image (values 0 or 255).
-        """
-        raise NotImplementedError("Implement this method")
+        _, binary = cv2.threshold(
+            image_gray,
+            self.threshold_value,
+            255,
+            cv2.THRESH_BINARY_INV
+        )
+        return binary
 
     def close_gaps(self, binary):
-        """Step 2 — morphological closing to fill small holes and gaps.
-
-        Args:
-            binary (np.ndarray): 2D uint8 binary image from threshold().
-
-        Returns:
-            np.ndarray: 2D uint8 binary image, same shape.
-        """
-        raise NotImplementedError("Implement this method")
+        kernel = np.ones(
+            (self.kernel_size, self.kernel_size),
+            dtype=np.uint8
+        )
+        return cv2.morphologyEx(
+            binary, cv2.MORPH_CLOSE, kernel
+        )
 
     def detect_edges(self, binary):
-        """Step 3 — Canny edge detection.
-
-        Args:
-            binary (np.ndarray): 2D uint8 binary image from close_gaps().
-
-        Returns:
-            np.ndarray: 2D uint8 edge image (edges are 255, everything else 0).
-        """
-        raise NotImplementedError("Implement this method")
+        return cv2.Canny(
+            binary,
+            self.canny_low,
+            self.canny_high
+        )
 
     def mask_roi(self, edges):
-        """Step 4 — keep only the edges inside the region of interest (self.roi).
-
-        Args:
-            edges (np.ndarray): 2D uint8 edge image from detect_edges().
-
-        Returns:
-            np.ndarray: 2D uint8 edge image, zero outside the region of interest.
-        """
-        raise NotImplementedError("Implement this method")
+        mask = np.zeros_like(edges)
+        cv2.fillPoly(mask, self.roi, 255)
+        return cv2.bitwise_and(edges, edges, mask=mask)
 
     def find_lines(self, masked_edges):
-        """Step 5 — find straight line segments with the probabilistic Hough transform.
+        lines = cv2.HoughLinesP(
+            masked_edges,
+            self.hough_rho,
+            self.hough_theta,
+            self.hough_threshold,
+            minLineLength=self.min_line_len,
+            maxLineGap=self.max_line_gap
+        )
 
-        Args:
-            masked_edges (np.ndarray): 2D uint8 edge image from mask_roi().
+        if lines is None:
+            return np.empty((0, 4), dtype=np.int32)
 
-        Returns:
-            np.ndarray: shape (N, 4) — one row per line, (x1, y1, x2, y2).
-            Shape (0, 4) if no lines are found.
-        """
-        raise NotImplementedError("Implement this method")
+        return lines.reshape(-1, 4)
 
     def select_horizontal_lines(self, lines):
-        """Step 6 — keep only lines that are close to horizontal.
+        horizontal = []
 
-        A line is kept when |slope| <= self.slope_threshold, where
-        slope = (y2 - y1) / (x2 - x1). Vertical lines (x1 == x2) are never kept.
+        for x1, y1, x2, y2 in lines:
+            if x2 == x1:
+                continue
 
-        Args:
-            lines: (N, 4) array from find_lines(), one row (x1, y1, x2, y2) per line.
+            slope = (y2 - y1) / (x2 - x1)
 
-        Returns:
-            list of (x1, y1, x2, y2): the lines that pass.
-        """
-        raise NotImplementedError("Implement this method")
+            if abs(slope) <= self.slope_threshold:
+                horizontal.append((x1, y1, x2, y2))
+
+        return horizontal
 
     def calculate_fluid_levels(self, horizontal_lines, image_width):
-        """Step 7 — one fluid level (a y value) for each bottle.
+        groups = [[], [], []]
 
-        The image is split into three equal-width columns (left, middle,
-        right — one per bottle). Each line is assigned to the column its
-        centre falls in, and the level for a bottle is the median of the
-        centre y values of its lines.
+        for x1, y1, x2, y2 in horizontal_lines:
+            x_centre = (x1 + x2) / 2
+            y_centre = (y1 + y2) / 2
 
-        Args:
-            horizontal_lines: list of (x1, y1, x2, y2) from select_horizontal_lines().
-            image_width (int): width of the image in pixels.
+            column = min(
+                int(x_centre // (image_width / 3)), 2
+            )
+            groups[column].append(y_centre)
 
-        Returns:
-            list: [y_left, y_mid, y_right]. float('inf') for a bottle with no lines.
-        """
-        raise NotImplementedError("Implement this method")
+        return [
+            float(np.median(group)) if group else float('inf')
+            for group in groups
+        ]
 
     def detect_fluid_levels(self, image_gray):
-        """Step 8 — run the whole pipeline using the methods above.
+        self.thresholded = self.threshold(image_gray)
+        self.closed = self.close_gaps(self.thresholded)
+        self.edges = self.detect_edges(self.closed)
+        self.masked_edges = self.mask_roi(self.edges)
+        self.lines = self.find_lines(self.masked_edges)
+        self.horizontal_lines = self.select_horizontal_lines(
+            self.lines
+        )
+        self.fluid_levels = self.calculate_fluid_levels(
+            self.horizontal_lines, image_gray.shape[1]
+        )
 
-        Stores each intermediate result on self (thresholded, closed, edges,
-        masked_edges, lines, horizontal_lines, fluid_levels) so they can be
-        displayed afterwards.
+        return self.fluid_levels
 
-        Args:
-            image_gray (np.ndarray): 2D uint8 greyscale image of the three bottles.
 
-        Returns:
-            list: [y_left, y_mid, y_right] — the fluid level in each bottle.
-        """
-        raise NotImplementedError("Implement this method")
+    

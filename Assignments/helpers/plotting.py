@@ -48,8 +48,8 @@ def save_html(*figs, output_path):
         "<!DOCTYPE html><html>"
         "<head><meta charset='utf-8'>"
         f"<title>{title}</title>"
-        "<style>body{{font-family:sans-serif;padding:20px}}"
-        "hr{{margin:30px 0;border:1px solid #ccc}}</style></head>"
+        "<style>body{font-family:sans-serif;padding:20px}"
+        "hr{margin:30px 0;border:1px solid #ccc}</style></head>"
         "<body>" + "<hr>".join(parts) + "</body></html>"
     )
     with open(output_path, "w", encoding="utf-8") as fh:
